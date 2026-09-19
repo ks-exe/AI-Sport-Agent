@@ -1,0 +1,23 @@
+Customer Support Product Catalog and Policy Notes
+
+Loyalty tiers:
+Bronze members receive a 2 percent tier discount.
+Silver members receive a 5 percent tier discount.
+Gold members receive a 10 percent tier discount and priority email support.
+Platinum members receive a 15 percent tier discount, free expedited shipping, early product access, and premium return handling.
+
+Points policy:
+Customers may redeem loyalty points in 500 point blocks.
+Every 100 points is worth 1 USD.
+Points redemption is capped at 50 percent of the original order total.
+Tier discounts and points redemption may be combined.
+
+Return and refund policy:
+Delivered orders are eligible for automated refunds inside a 30 day return window when the item is unused or defective.
+Orders that are still processing or in transit should be handled by cancellation or shipment-intercept workflows instead of refunds.
+Refunds usually post to the original payment method within 5 business days.
+
+Featured products:
+AeroRun Performance Shoes support daily road running and include a 1 year workmanship warranty.
+TrailFlex Hydration Pack is intended for hiking and trail running, with a leak-resistant reservoir and 30 day return eligibility.
+BalancePro Yoga Mat is a non-slip training mat with recycled materials and a 90 day satisfaction guarantee.

@@ -1,0 +1,16 @@
+.env
+*.log
+*.pyc
+__pycache__/
+
+starter/.venv/
+starter/.uv-cache/
+starter/__pycache__/
+starter/lambda/__pycache__/
+
+starter/.bedrock_agentcore.yaml
+starter/setup-output.txt
+starter/submission-test-log.txt
+starter/openapi-orders.json
+starter/gateway-orders-api-target.json
+starter/gateway-refund-lambda-target.json
