@@ -2,12 +2,6 @@
 
 This repository contains an Amazon Bedrock AgentCore customer-support agent for a sports and fitness retailer. The implementation is in `starter/main.py`.
 
-## Screenshot
-
-The submission requirements screenshot is included below.
-
-![Submission requirements](screenshots/submission-requirements.png)
-
 ## Runtime Deployment
 
 The agent uses `BedrockAgentCoreApp` at module level, exposes an async `invoke` function with `@app.entrypoint`, and starts with `app.run()`.
