@@ -251,7 +251,6 @@ def write_openapi_schema(api_url: str):
             "/orders/{order_id}": {
                 "get": {
                     "operationId": "get_order",
-                    "operationName": "get_order",
                     "description": "Retrieve a single order by order_id.",
                     "parameters": [
                         {"name": "order_id", "in": "path", "required": True, "schema": {"type": "string"}}
@@ -262,7 +261,6 @@ def write_openapi_schema(api_url: str):
             "/customers/{customer_id}/orders": {
                 "get": {
                     "operationId": "get_customer_orders",
-                    "operationName": "get_customer_orders",
                     "description": "List orders for a customer.",
                     "parameters": [
                         {"name": "customer_id", "in": "path", "required": True, "schema": {"type": "string"}}
@@ -273,7 +271,6 @@ def write_openapi_schema(api_url: str):
             "/customers/{customer_id}": {
                 "get": {
                     "operationId": "get_customer",
-                    "operationName": "get_customer",
                     "description": "Retrieve customer profile, loyalty tier, and points.",
                     "parameters": [
                         {"name": "customer_id", "in": "path", "required": True, "schema": {"type": "string"}}
@@ -415,7 +412,7 @@ def print_next_steps(outputs: dict[str, str]):
         "--name refund-lambda-target "
         "--target-configuration file://gateway-refund-lambda-target.json "
         "--credential-provider-configurations "
-        "'[{\"credentialProviderType\":\"GATEWAY_IAM_ROLE\",\"credentialProvider\":{\"iamCredentialProvider\":{\"service\":\"lambda\",\"region\":\"us-east-1\"}}}]'"
+        "'[{\"credentialProviderType\":\"GATEWAY_IAM_ROLE\"}]'"
     )
 
     print("\nSet these environment variables before deploying the runtime")

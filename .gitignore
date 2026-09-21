@@ -9,8 +9,16 @@ starter/__pycache__/
 starter/lambda/__pycache__/
 
 starter/.bedrock_agentcore.yaml
+starter/.bedrock_agentcore/
 starter/setup-output.txt
 starter/submission-test-log.txt
 starter/openapi-orders.json
 starter/gateway-orders-api-target.json
 starter/gateway-refund-lambda-target.json
+starter/gateway-lambda-invoke-policy.json
+starter/gateway-lambda-credentials.json
+starter/gateway-*-output.txt
+starter/s3vectors-*-output.txt
+starter/kb-*.json
+starter/kb-*-output.txt
+starter/.agentcore_deploy/
