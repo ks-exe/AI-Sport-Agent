@@ -98,9 +98,7 @@ Observed response:
   "points_redeemed": 4000,
   "tier_discount_pct": 10.0,
   "final_total": 95.0,
-  "remaining_points": 250,
-  "points_earned": 143,
-  "earn_rate_multiplier": 1.5
+  "remaining_points": 250
 }
 ```
 

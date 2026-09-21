@@ -39,6 +39,7 @@ except ImportError:
 
 
 LOGGER = logging.getLogger(__name__)
+logger = LOGGER
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 # Prominent deployment configuration. Replace these values through environment
@@ -64,8 +65,6 @@ class LoyaltyDiscountResult(BaseModel):
     tier_discount_pct: float = Field(ge=0)
     final_total: float = Field(ge=0)
     remaining_points: int = Field(ge=0)
-    points_earned: int = Field(ge=0)
-    earn_rate_multiplier: float = Field(ge=0)
 
 SYSTEM_PROMPT = """
 You are a customer support agent for an online sports and fitness retail business.
@@ -133,17 +132,13 @@ def _tier_earn_rate(tier: str) -> float:
 def _fallback_loyalty_discount(points: int, tier: str, order_total: float) -> dict[str, Any]:
     subtotal = _coerce_positive_decimal(order_total)
     tier_pct = Decimal(str(_tier_discount_pct(tier)))
-    earn_rate = Decimal(str(_tier_earn_rate(tier)))
     tier_discount = subtotal * tier_pct / Decimal("100")
     final_total = subtotal - tier_discount
-    points_earned = int((final_total * earn_rate).to_integral_value(rounding=ROUND_HALF_UP))
     return LoyaltyDiscountResult(
         points_redeemed=0,
         tier_discount_pct=float(tier_pct),
         final_total=_money(final_total),
         remaining_points=_coerce_positive_int(points),
-        points_earned=points_earned,
-        earn_rate_multiplier=float(earn_rate),
     ).model_dump()
 
 
@@ -209,8 +204,7 @@ def calculate_loyalty_discount(points: int, tier: str, order_total: float) -> di
         order_total: Pre-discount order total in USD.
 
     Returns:
-        A dictionary with points_redeemed, tier_discount_pct, final_total, remaining_points,
-        points_earned, and earn_rate_multiplier.
+        A dictionary with points_redeemed, tier_discount_pct, final_total, and remaining_points.
     """
     safe_points = _coerce_positive_int(points)
     safe_total = _coerce_positive_decimal(order_total)
@@ -253,8 +247,6 @@ print(json.dumps({{
     "tier_discount_pct": float(tier_pct),
     "final_total": money(final_total),
     "remaining_points": int(POINTS - points_redeemed),
-    "points_earned": points_earned,
-    "earn_rate_multiplier": float(earn_rate),
 }}))
 """
     try:
@@ -269,11 +261,9 @@ print(json.dumps({{
             tier_discount_pct=float(parsed["tier_discount_pct"]),
             final_total=_money(parsed["final_total"]),
             remaining_points=int(parsed["remaining_points"]),
-            points_earned=int(parsed["points_earned"]),
-            earn_rate_multiplier=float(parsed["earn_rate_multiplier"]),
         ).model_dump()
     except Exception as exc:
-        LOGGER.warning("Code Interpreter discount calculation failed: %s", exc)
+        logger.exception("Code Interpreter discount calculation failed; using tier-only fallback: %s", exc)
         return _fallback_loyalty_discount(safe_points, safe_tier, float(safe_total))
 
 
@@ -495,6 +485,21 @@ def _gateway_auth_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
+def _gateway_error_result(operation: str) -> dict[str, Any]:
+    return {
+        "status": "error",
+        "content": [
+            {
+                "text": (
+                    f"Gateway {operation} is temporarily unavailable. "
+                    "Verify GATEWAY_URL, Gateway authorization scope, and target status, then retry. "
+                    "No credentials or tokens were exposed."
+                )
+            }
+        ],
+    }
+
+
 def _call_gateway_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     gateway_url = GATEWAY_URL.strip()
     if not gateway_url:
@@ -505,14 +510,31 @@ def _call_gateway_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, A
         startup_timeout=45,
         application_name="customer-support-agent-direct",
     )
-    with mcp_client:
-        LOGGER.info("Direct Gateway tool invocation: %s", tool_name)
-        return mcp_client.call_tool_sync(str(uuid.uuid4()), tool_name, arguments)
+    try:
+        with mcp_client:
+            logger.info("Direct Gateway tool invocation: %s", tool_name)
+            result = mcp_client.call_tool_sync(str(uuid.uuid4()), tool_name, arguments)
+            if not _tool_result_text(result):
+                logger.exception("Gateway tool invocation returned an empty result: %s", tool_name)
+                return _gateway_error_result(f"tool {tool_name}")
+            return result
+    except TimeoutError:
+        logger.exception("Gateway tool invocation timed out: %s", tool_name)
+        return _gateway_error_result(f"tool {tool_name}")
+    except ConnectionError:
+        logger.exception("Gateway connection failed while invoking tool: %s", tool_name)
+        return _gateway_error_result(f"tool {tool_name}")
+    except Exception as exc:
+        logger.exception("Gateway tool invocation failed for %s: %s", tool_name, exc)
+        return _gateway_error_result(f"tool {tool_name}")
 
 
 def _parse_gateway_payload(result: dict[str, Any]) -> dict[str, Any]:
     text = _tool_result_text(result)
-    payload = json.loads(text) if text else {}
+    try:
+        payload = json.loads(text) if text else {}
+    except json.JSONDecodeError:
+        return {"error": text}
     body = payload.get("body")
     if isinstance(body, str):
         try:
@@ -763,27 +785,59 @@ def _run_agent(prompt: str, customer_id: str, session_id: str) -> str:
     tools = _base_tools()
     gateway_url = GATEWAY_URL.strip()
     if gateway_url:
-        try:
-            gateway_headers = {}
-            gateway_token = GATEWAY_ACCESS_TOKEN.strip()
-            if gateway_token:
-                gateway_headers["Authorization"] = f"Bearer {gateway_token}"
+        gateway_headers = {}
+        gateway_token = GATEWAY_ACCESS_TOKEN.strip()
+        if gateway_token:
+            gateway_headers["Authorization"] = f"Bearer {gateway_token}"
 
-            mcp_client = MCPClient(
-                lambda: _gateway_transport(gateway_url, gateway_headers),
-                startup_timeout=45,
-                application_name="customer-support-agent",
-            )
-            with mcp_client:
-                gateway_tools = list(mcp_client.list_tools_sync())
-                LOGGER.info("Discovered %d MCP Gateway tools.", len(gateway_tools))
-                agent = _build_agent(tools + gateway_tools)
+        gateway_client = MCPClient(
+            lambda: _gateway_transport(gateway_url, gateway_headers),
+            startup_timeout=45,
+            application_name="customer-support-agent",
+        )
+        try:
+            with gateway_client:
+                try:
+                    gateway_tools = list(gateway_client.list_tools_sync())
+                    tools.extend(gateway_tools)
+
+                    logger.info(
+                        "Gateway connected successfully. Loaded %d tools.",
+                        len(gateway_tools),
+                    )
+
+                except TimeoutError:
+                    logger.exception("Gateway tool loading timed out")
+
+                except ConnectionError:
+                    logger.exception("Gateway connection failed")
+
+                except Exception as exc:
+                    logger.exception(
+                        "Gateway tool loading failed: %s", exc
+                    )
+
+                agent = _build_agent(tools)
                 result = agent(prompt, invocation_state=invocation_state)
                 response = str(result).strip()
                 _save_support_interaction_direct(customer_id, session_id, prompt, response)
                 return response
+        except TimeoutError:
+            logger.exception("Gateway tool loading timed out")
+        except ConnectionError:
+            logger.exception("Gateway connection failed")
         except Exception as exc:
-            LOGGER.warning("MCP Gateway discovery failed; running with local tools only: %s", exc)
+            logger.exception(
+                "Gateway tool loading failed: %s", exc
+            )
+            if "gateway" in prompt.lower() or "tool" in prompt.lower():
+                response = (
+                    "Gateway tools are temporarily unavailable. "
+                    "Verify GATEWAY_URL, Gateway authorization scope, and target status, then retry. "
+                    "No credentials or tokens were exposed."
+                )
+                _save_support_interaction_direct(customer_id, session_id, prompt, response)
+                return response
     else:
         LOGGER.info("GATEWAY_URL is empty; running with local tools only.")
 
